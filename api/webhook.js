@@ -12,20 +12,23 @@ export default async function handler(req, res) {
       req.on('data', chunk => { data += chunk; });
       req.on('end', () => resolve(data));
     });
-    
+
     console.log('RAW BODY:', rawBody.slice(0, 500));
-    
+
     let body = {};
     try { body = JSON.parse(rawBody); } catch(e) {
       console.log('Not JSON, raw:', rawBody.slice(0, 200));
     }
+
     // Extract email data from ReachInbox webhook payload
-    const senderName = body?.from?.name || body?.lead?.name || 'there';
-    const senderEmail = body?.from?.email || body?.lead?.email || '';
-    const emailSubject = body?.subject || '';
-    const emailBody = body?.text || body?.html?.replace(/<[^>]*>/g, '') || '';
-    const threadId = body?.threadId || body?.thread_id || '';
-    const campaignId = body?.campaignId || body?.campaign_id || '';
+    const senderName = body?.lead_name || body?.from?.name || body?.lead?.name || 'there';
+    const senderEmail = body?.lead_email || body?.from?.email || body?.lead?.email || '';
+    const emailSubject = body?.email_subject || body?.subject || '';
+    const emailBody = body?.email_sent_body || body?.text || body?.html?.replace(/<[^>]*>/g, '') || '';
+    const threadId = body?.thread_id || body?.threadId || '';
+    const campaignId = body?.campaign_id || body?.campaignId || '';
+
+    console.log('Parsed - Email:', senderEmail, 'Subject:', emailSubject);
 
     // Determine gender from name for video link selection
     const firstName = senderName.split(' ')[0];
@@ -74,8 +77,8 @@ SITUATION HANDLING:
 - "Call me" (phone number provided): Say Daria will call them. Don't push Calendly.
 - "Call me" (no phone number): Ask for their number and best time.
 - Asking for info/sample: Send the appropriate video link (YouTube for women, Loom for men), then invite to Calendly call.
-- Asking for price: "$299/month for a single agent. One mover in CA booked $30k in extra jobs after rolling this out." → push Calendly.
-- Has a competitor / already has a solution: Acknowledge it, say AI usually complements existing tools for missed/after-hours calls → Calendly.
+- Asking for price: "$299/month for a single agent. One mover in CA booked $30k in extra jobs after rolling this out." then push Calendly.
+- Has a competitor / already has a solution: Acknowledge it, say AI usually complements existing tools for missed/after-hours calls, then Calendly.
 - Busy / contact later: Acknowledge, leave the video link, keep the door open.
 - Wants to pick their own time: Send Calendly link directly.
 - Cancelled / no-show: Friendly follow-up, suggest 2 time options, offer Calendly.
@@ -106,13 +109,25 @@ Write a reply email. Return ONLY the email body text, no subject line, no extra 
       })
     });
 
-    const claudeData = await claudeResponse.json();
+    const claudeText = await claudeResponse.text();
+    console.log('Claude raw response:', claudeText.slice(0, 300));
+
+    let claudeData;
+    try {
+      claudeData = JSON.parse(claudeText);
+    } catch(e) {
+      console.error('Claude API returned non-JSON:', claudeText.slice(0, 200));
+      return res.status(500).json({ error: 'Claude API error: ' + claudeText.slice(0, 200) });
+    }
+
     const replyText = claudeData?.content?.[0]?.text || '';
 
     if (!replyText) {
-      console.error('Claude returned empty response:', claudeData);
+      console.error('Claude returned empty response:', JSON.stringify(claudeData));
       return res.status(500).json({ error: 'Claude returned empty response' });
     }
+
+    console.log('Reply text:', replyText.slice(0, 200));
 
     // Send reply via ReachInbox API
     const reachInboxResponse = await fetch('https://api.reachinbox.ai/api/v1/onebox/reply', {
@@ -129,10 +144,8 @@ Write a reply email. Return ONLY the email body text, no subject line, no extra 
       })
     });
 
-    const reachInboxData = await reachInboxResponse.json();
-
-    console.log('✅ Reply sent to:', senderEmail);
-    console.log('ReachInbox response:', reachInboxData);
+    const reachInboxText = await reachInboxResponse.text();
+    console.log('ReachInbox response:', reachInboxText.slice(0, 300));
 
     return res.status(200).json({
       success: true,
@@ -141,7 +154,7 @@ Write a reply email. Return ONLY the email body text, no subject line, no extra 
     });
 
   } catch (error) {
-    console.error('❌ Webhook error:', error);
+    console.error('Webhook error:', error.message);
     return res.status(500).json({ error: error.message });
   }
 }
