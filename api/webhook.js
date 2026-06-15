@@ -7,12 +7,18 @@ export default async function handler(req, res) {
   }
 
   try {
-   let body = req.body;
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); } catch(e) { body = {}; }
+    const rawBody = await new Promise((resolve) => {
+      let data = '';
+      req.on('data', chunk => { data += chunk; });
+      req.on('end', () => resolve(data));
+    });
+    
+    console.log('RAW BODY:', rawBody.slice(0, 500));
+    
+    let body = {};
+    try { body = JSON.parse(rawBody); } catch(e) {
+      console.log('Not JSON, raw:', rawBody.slice(0, 200));
     }
-    if (!body || typeof body !== 'object') body = {};
-
     // Extract email data from ReachInbox webhook payload
     const senderName = body?.from?.name || body?.lead?.name || 'there';
     const senderEmail = body?.from?.email || body?.lead?.email || '';
