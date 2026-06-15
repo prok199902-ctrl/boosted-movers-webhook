@@ -25,12 +25,11 @@ export default async function handler(req, res) {
     const senderEmail = body?.lead_email || body?.from?.email || body?.lead?.email || '';
     const emailSubject = body?.email_subject || body?.subject || '';
     const emailBody = body?.email_sent_body || body?.text || body?.html?.replace(/<[^>]*>/g, '') || '';
-    const threadId = body?.thread_id || body?.threadId || '';
-    const campaignId = body?.campaign_id || body?.campaignId || '';
+    const messageId = body?.message_id || '';
+    const emailAccount = body?.email_account || '';
 
-    console.log('Parsed - Email:', senderEmail, 'Subject:', emailSubject);
+    console.log('Parsed - Email:', senderEmail, 'Subject:', emailSubject, 'MessageId:', messageId);
 
-    // Determine gender from name for video link selection
     const firstName = senderName.split(' ')[0];
 
     // Generate reply using Claude API
@@ -129,19 +128,26 @@ Write a reply email. Return ONLY the email body text, no subject line, no extra 
 
     console.log('Reply text:', replyText.slice(0, 200));
 
-    // Send reply via ReachInbox API
-    const reachInboxResponse = await fetch('https://api.reachinbox.ai/api/v1/onebox/emails/reply', {
+    // Send reply via ReachInbox API using multipart/form-data
+    const emailData = {
+      to: [senderEmail],
+      from: emailAccount,
+      subject: `Re: ${emailSubject}`,
+      body: replyText.replace(/\n/g, '<br>'),
+      inReplyTo: messageId,
+      originalMessageId: messageId,
+      references: [messageId]
+    };
+
+    const formData = new FormData();
+    formData.append('emaildata', JSON.stringify(emailData));
+
+    const reachInboxResponse = await fetch('https://api.reachinbox.ai/api/v1/onebox/send', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.REACHINBOX_API_KEY}`
       },
-      body: JSON.stringify({
-        threadId: threadId,
-        campaignId: campaignId,
-        replyText: replyText,
-        to: senderEmail
-      })
+      body: formData
     });
 
     const reachInboxText = await reachInboxResponse.text();
