@@ -130,7 +130,7 @@ Write a reply email. Return ONLY the email body text, no subject line, no extra 
     console.log('Reply text:', replyText.slice(0, 200));
 
     // Send reply via ReachInbox API
-    const reachInboxResponse = await fetch('https://api.reachinbox.ai/api/v1/onebox/reply', {
+    const reachInboxResponse = await fetch('https://api.reachinbox.ai/api/v1/onebox/emails/reply', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
